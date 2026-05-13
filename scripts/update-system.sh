@@ -34,49 +34,86 @@ read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Update Wifipumpkin3...${RESET}"
-cd /usr/share/wifipumpkin3
-git pull
-python3 setup.py install
-wifipumpkin3 --version
+if [ -d /usr/share/wifipumpkin3 ]; then
+	cd /usr/share/wifipumpkin3
+	git pull
+	python3 -m pip install . --break-system-packages 2>/dev/null || python3 -m pip install .
+	wifipumpkin3 --version || true
+else
+	echo "${RED}[!] Wifipumpkin3 not found in /usr/share/wifipumpkin3${RESET}"
+fi
 read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Update Wifiphisher...${RESET}"
-cd /usr/share/wifiphisher
-git pull
-python3 setup.py install
+if [ -d /usr/share/wifiphisher ]; then
+	cd /usr/share/wifiphisher
+	git pull
+	python3 -m pip install . --break-system-packages 2>/dev/null || python3 -m pip install .
+else
+	echo "${RED}[!] Wifiphisher not found in /usr/share/wifiphisher${RESET}"
+fi
 read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Update Fluxion...${RESET}"
-cd /usr/share/fluxion
-git pull
+if [ -d /usr/share/fluxion ]; then
+	cd /usr/share/fluxion
+	git pull
+else
+	echo "${RED}[!] Fluxion not found in /usr/share/fluxion${RESET}"
+fi
 read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Update EAPHammer...${RESET}"
-cd /usr/share/eaphammer
-git pull
-# Setup takes lots of time, do it manually
-#./kali-setup
-echo "${YELLOW}[~] Setup of updated files should be run manually (/usr/share/kali-setup.sh). Takes lots of time !${RESET}"
+if [ -d /usr/share/eaphammer ]; then
+	cd /usr/share/eaphammer
+	git pull
+	# Setup takes lots of time, do it manually
+	#./kali-setup
+	echo "${YELLOW}[~] Setup of updated files should be run manually (/usr/share/eaphammer/kali-setup). Takes lots of time !${RESET}"
+else
+	echo "${RED}[!] EAPHammer not found in /usr/share/eaphammer${RESET}"
+fi
 read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Update Airgeddon...${RESET}"
-cd /usr/share/airgeddon
-git pull
+if [ -d /usr/share/airgeddon ]; then
+	cd /usr/share/airgeddon
+	git pull
+else
+	echo "${RED}[!] Airgeddon not found in /usr/share/airgeddon${RESET}"
+fi
 read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Update Berate_ap...${RESET}"
-cd /usr/share/berate_ap
-git pull
+if [ -d /usr/share/berate_ap ]; then
+	cd /usr/share/berate_ap
+	git pull
+else
+	echo "${RED}[!] Berate_ap not found in /usr/share/berate_ap${RESET}"
+fi
 read -n 1 -s -r -p "Press any key to continue"
 
 
-echo "${YELLOW}[~] Install WPA_Sycophant...${RESET}"
-cd /usr/share/wpa_sycophant
-git pull
+echo "${YELLOW}[~] Update WPA_Sycophant...${RESET}"
+if [ -d /usr/share/wpa_sycophant ]; then
+	cd /usr/share/wpa_sycophant
+	git pull
+else
+	echo "${RED}[!] WPA_Sycophant not found in /usr/share/wpa_sycophant${RESET}"
+fi
 read -n 1 -s -r -p "Press any key to continue"
 
+
+echo "${YELLOW}[~] Update locate database...${RESET}"
+updatedb
+
+echo "${YELLOW}[~] Cleaning up package cache...${RESET}"
+apt-get autoremove -y
+apt-get clean
+
+echo "${GREEN}[+] Update finished.${RESET}"

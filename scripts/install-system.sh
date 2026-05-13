@@ -71,8 +71,8 @@ read -n 1 -s -r -p "Press any key to continue"
 
 echo "${YELLOW}[~] Add Kali rolling repository in /etc/apt/sources.list${RESET}"
 # https://www.kali.org/docs/general-use/kali-linux-sources-list-repositories/
-if cat /etc/apt/sources.list | grep -q "deb http://http.kali.org/kali kali-rolling main non-free contrib"; then
-	echo "deb http://http.kali.org/kali kali-rolling main non-free contrib" | tee /etc/apt/sources.list
+if ! grep -q "deb http://http.kali.org/kali kali-rolling main non-free contrib" /etc/apt/sources.list; then
+	echo "deb http://http.kali.org/kali kali-rolling main non-free contrib" | tee -a /etc/apt/sources.list
 fi
 read -n 1 -s -r -p "Press any key to continue"
 
@@ -86,35 +86,38 @@ read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Install additional utils & dependencies ...${RESET}"
-apt-get -y install htop iotop bashtop bmon git libcurl4-openssl-dev libssl-dev zlib1g-dev libpcap-dev
-apt-get -y install dhcpd php-cgi iftop build-essential pkg-config libnl-genl-3-dev
-apt-get -y install python3-pip python3-scapy
+apt-get -y install htop iotop btop bmon git libcurl4-openssl-dev libssl-dev zlib1g-dev libpcap-dev
+apt-get -y install isc-dhcp-server php-cgi iftop build-essential pkg-config libnl-genl-3-dev
+apt-get -y install python3-pip python3-scapy netdiscover plocate
 read -n 1 -s -r -p "Press any key to continue"
 
 
-echo "${YELLOW}[~] Update datetime...${RESET}"
-apt-get install -y ntp ntpdate
-ntpdate fr.pool.ntp.org
-date
-cp config/ntpdate.service /etc/systemd/system/ntpdate.service
-chown root:root /etc/systemd/system/ntpdate.service
-chmod 644 /etc/systemd/system/ntpdate.service
-systemctl enable ntpdate
-systemctl start ntpdate
+echo "${YELLOW}[~] Update datetime using systemd-timesyncd...${RESET}"
+apt-get install -y systemd-timesyncd
+systemctl enable systemd-timesyncd
+systemctl start systemd-timesyncd
+timedatectl status
+read -n 1 -s -r -p "Press any key to continue"
 
 
 # -------------------------------------------------------------------------------------------------
-# WiFi Driver for Device not working out-ot-box on Kali
+# WiFi Driver for Device not working out-of-box on Kali
 
 echo "${YELLOW}[~] Install Wi-Fi drivers for Realtek RTL88x2bu (BrosTrend AC1200 Model AC1L Dongle)...${RESET}"
 # https://fr.scribd.com/document/424931230/AC1L-AC3L-Linux-Manual-BrosTrend-WiFI-Adapter-v4
-wget deb.trendtechcn.com/installer.sh -O /tmp/installer.sh
-chmod +x /tmp/installer.sh
-sudo /tmp/installer.sh
+# Fallback: if vendor script fails, manual build instructions are in README
+wget --timeout=30 -q deb.trendtechcn.com/installer.sh -O /tmp/installer.sh
+if [ -s /tmp/installer.sh ]; then
+	chmod +x /tmp/installer.sh
+	sudo /tmp/installer.sh
+else
+	echo "${RED}[!] Vendor installer download failed. You may need to build the driver manually:${RESET}"
+	echo "    git clone https://github.com/cilynx/rtl88x2bu.git && cd rtl88x2bu && ./dkms-install.sh"
+fi
 read -n 1 -s -r -p "Press any key to continue"
 
 echo "${YELLOW}[~] Check Wi-Fi Dongle Realtek RTL88x2bu correct install${RESET}"
-dmesg | grep -i rtl88
+dmesg | grep -i rtl88 || true
 lsusb
 iw dev
 ip a
@@ -128,8 +131,8 @@ echo "${YELLOW}[~] Enable SSH server...${RESET}"
 apt-get install -y ssh openssh-server
 systemctl enable ssh
 service ssh start
-systemctl status ssh
-netstat -latupen | grep ':22'
+systemctl status ssh || true
+ss -tulpen | grep ':22'
 read -n 1 -s -r -p "Press any key to continue"
 
 
@@ -143,36 +146,35 @@ read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Checking Guacamole status${RESET}"
-systemctl status tomcat9 guacd mysql
-netstat -latupen | grep "mysqld\|guacd\|java"
+TOMCAT_SVC=$(systemctl list-unit-files --type=service 2>/dev/null | grep -oE '^tomcat[0-9]*\.service' | head -n1 | sed 's/\.service//')
+[ -z "$TOMCAT_SVC" ] && TOMCAT_SVC="tomcat9"
+systemctl status ${TOMCAT_SVC} guacd mysql || true
+ss -tulpen | grep -E "mysqld|guacd|java"
 read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Install and enable VNC service (autostart at boot)...${RESET}"
 apt-get install -y tigervnc-common tigervnc-standalone-server
 apt-get install -y autocutsel
-#mkdir ~/.vnc/ && wget https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-project/-/raw/master/nethunter-fs/profiles/xstartup -O ~/.vnc/xstartup
-#apt-get install x11vnc
 rm -f /tmp/.X11-unix/X0
 rm -f /tmp/.X0-lock
-#vncserver -kill :1
-#vncserver :1
-#x11vnc -display :0 -autoport -localhost -nopw -bg -xkb -ncache -ncache_cr -quiet -forever
-#cp x11vnc.service /lib/systemd/system/x11vnc.service
-#systemctl enable x11vnc.service
 echo "${YELLOW}Enter VNC password to use:${RESET}"
 vncpasswd # Will ask for VNC password
+if [ ! -f /root/.vnc/passwd ]; then
+    echo "${RED}[!] VNC password file not found. Did you set the password? Aborting.${RESET}"
+    exit 1
+fi
 cp config/vncserver.service /etc/systemd/system/vncserver.service
 chown root:root /etc/systemd/system/vncserver.service
 chmod 644 /etc/systemd/system/vncserver.service
 systemctl start vncserver
 systemctl enable vncserver
-systemctl status vncserver
+systemctl status vncserver || true
 read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Check VNC server is running...${RESET}"
-netstat -latupen | grep -i vnc
+ss -tulpen | grep -i vnc
 read -n 1 -s -r -p "Press any key to continue"
 
 
@@ -180,17 +182,17 @@ read -n 1 -s -r -p "Press any key to continue"
 # System settings
 
 echo "${YELLOW}Configure auto-login at boot...${RESET}"
-mv /etc/lightdm/lightdm.conf /etc/lightdm/lightdm.conf.old
+[ -f /etc/lightdm/lightdm.conf ] && cp /etc/lightdm/lightdm.conf /etc/lightdm/lightdm.conf.backup.$(date +%Y%m%d%H%M%S)
 cp config/lightdm.conf /etc/lightdm/lightdm.conf
-mv /etc/pam.d/lightdm-autologin /etc/pam.d/lightdm-autologin.old
+[ -f /etc/pam.d/lightdm-autologin ] && cp /etc/pam.d/lightdm-autologin /etc/pam.d/lightdm-autologin.backup.$(date +%Y%m%d%H%M%S)
 cp config/lightdm-autologin /etc/pam.d/lightdm-autologin
 echo
 read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Disable Network-Manager to avoid undesirable side-effects...${RESET}"
-systemctl stop NetworkManager
-systemctl disable NetworkManager
+systemctl stop NetworkManager || true
+systemctl disable NetworkManager || true
 read -n 1 -s -r -p "Press any key to continue"
 
 
@@ -206,15 +208,14 @@ echo "${YELLOW}${WLAN_INTERFACE_ALFA_AWUS036ACH} => USB Adapter Alfa AWUS036ACH 
 # Note: We do not use wlan1, wlan2... naming for USB dongles devices because Udev feature appeared bugged
 # during tests (https://wiki.debian.org/NetworkInterfaceNames) and we need consistent naming to avoid confusion
 echo
-cp /usr/lib/systemd/network/73-usb-net-by-mac.link /usr/lib/systemd/network/73-usb-net-by-mac.link.old
-cp /usr/lib/systemd/network/99-default.link /usr/lib/systemd/network/99-default.link.old
+cp /usr/lib/systemd/network/73-usb-net-by-mac.link /usr/lib/systemd/network/73-usb-net-by-mac.link.old || true
+cp /usr/lib/systemd/network/99-default.link /usr/lib/systemd/network/99-default.link.old || true
 if [ -f /etc/udev/rules.d/70-persistent-net.rules ]; then
 	mv /etc/udev/rules.d/70-persistent-net.rules /etc/udev/rules.d/70-persistent-net.rules.old
 fi
 if [ -f /etc/udev/rules.d/73-usb-net-by-mac.rules ]; then
 	mv /etc/udev/rules.d/73-usb-net-by-mac.rules /etc/udev/rules.d/73-usb-net-by-mac.rules.old
 fi
-# cp config/70-persistent-net.rules /etc/udev/rules.d/70-persistent-net.rules
 cat > /etc/udev/rules.d/70-persistent-net.rules <<EOF
 SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="${MAC_ETH0}", NAME="eth0"
 SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="${MAC_WLAN0}", NAME="wlan0"
@@ -223,17 +224,19 @@ EOF
 cp config/73-usb-net-by-mac.rules /etc/udev/rules.d/73-usb-net-by-mac.rules
 
 systemctl restart systemd-udevd
+udevadm control --reload-rules
+udevadm trigger --subsystem-match=net
 read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Configure network interfaces${RESET}"
-mv /etc/network/interfaces /etc/network/interfaces.old
+[ -f /etc/network/interfaces ] && cp /etc/network/interfaces /etc/network/interfaces.backup.$(date +%Y%m%d%H%M%S)
 cat > /etc/network/interfaces <<EOF
 
 auto lo
 iface lo inet loopback
 
-# Automatic connection to network via eth0 if Ethenet connected
+# Automatic connection to network via eth0 if Ethernet connected
 auto eth0
 allow-hotplug eth0
 iface eth0 inet dhcp
@@ -254,19 +257,15 @@ iface ${WLAN_INTERFACE_BROSTREND_AC1L} inet static
   address 10.0.0.1
   netmask 255.255.255.0
   up route add -net 10.0.0.0 netmask 255.255.255.0 gw 10.0.0.1
-# iface ${WLAN_INTERFACE_BROSTREND_AC1L} inet manual
-# ifdown ${WLAN_INTERFACE_BROSTREND_AC1L}
 
 
 # WiFi USB Adapter Alfa AWUS036NEH Ralink RT2870/RT3070
 # Disabled by default at boot
 iface ${WLAN_INTERFACE_ALFA_AWUS036NEH} inet manual
-ifdown ${WLAN_INTERFACE_ALFA_AWUS036NEH}
 
 # WiFi USB Adapter Alfa AWUS036ACH Realtek RTL8812AU
 # Disabled by default at boot
 iface ${WLAN_INTERFACE_ALFA_AWUS036ACH} inet manual
-ifdown ${WLAN_INTERFACE_ALFA_AWUS036ACH}
 
 EOF
 
@@ -283,7 +282,7 @@ read -n 1 -s -r -p "Press any key to continue"
 echo "${YELLOW}[~] Setup AP at boot for pwnbox access via WiFi...${RESET}"
 
 echo "${YELLOW}[~] Configure dnsmasq...${RESET}"
-mv /etc/dnsmasq.conf /etc/dnsmasq.conf.old
+[ -f /etc/dnsmasq.conf ] && cp /etc/dnsmasq.conf /etc/dnsmasq.conf.backup.$(date +%Y%m%d%H%M%S)
 cat > /etc/dnsmasq.conf <<EOF
 
 interface=${WLAN_INTERFACE_BROSTREND_AC1L}
@@ -301,7 +300,8 @@ EOF
 
 
 echo "${YELLOW}[~] Configure hostapd...${RESET}"
-mv /etc/hostapd/hostapd.conf /etc/hostapd.conf.old
+mkdir -p /etc/hostapd
+[ -f /etc/hostapd/hostapd.conf ] && cp /etc/hostapd/hostapd.conf /etc/hostapd/hostapd.conf.backup.$(date +%Y%m%d%H%M%S)
 cat > /etc/hostapd/hostapd.conf <<EOF
 
 interface=${WLAN_INTERFACE_BROSTREND_AC1L}
@@ -323,12 +323,23 @@ wme_enabled=1
 EOF
 
 echo "${YELLOW}[~] Configure hostapd & dnsmasq to start at boot as service...${RESET}"
-systemctl unmask hostapd # by default, service is masked on pi
+# Tell hostapd where its config file is
+if [ -f /etc/default/hostapd ]; then
+    if grep -q '^DAEMON_CONF=' /etc/default/hostapd; then
+        sed -i 's|^DAEMON_CONF=.*|DAEMON_CONF="/etc/hostapd/hostapd.conf"|' /etc/default/hostapd
+    else
+        echo 'DAEMON_CONF="/etc/hostapd/hostapd.conf"' >> /etc/default/hostapd
+    fi
+fi
+systemctl unmask hostapd || true # by default, service is masked on pi
 systemctl enable hostapd
 systemctl start hostapd
 
 systemctl enable dnsmasq
 systemctl start dnsmasq
+# Disable isc-dhcp-server to avoid port 67/udp conflict with dnsmasq
+systemctl disable isc-dhcp-server || true
+systemctl stop isc-dhcp-server || true
 
 read -n 1 -s -r -p "Press any key to continue"
 
@@ -357,104 +368,107 @@ read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Install beef-xss from repository (if not already)...${RESET}"
-apt-get install -y beef-xss
-read -n 1 -s -r -p "Press any key to continue"
-
-
-echo "${YELLOW}[~] Install pip2 for old python2.7 scripts dependencies install...${RESET}"
-cd /tmp
-curl -k https://bootstrap.pypa.io/get-pip.py --output get-pip.py
-python2 get-pip.py
-read -n 1 -s -r -p "Press any key to continue"
-
-
-echo "${YELLOW}[~] Install Scapy & Scapy-com for Python2...${RESET}"
-python2 -m pip install scapy
-cd /usr/share
-git clone https://github.com/Tylous/Scapy-com.git
-cd Scapy-com
-python2 setup.py install
+apt-get install -y beef-xss || echo "${YELLOW}[~] beef-xss may not be available on this architecture, skipping${RESET}"
 read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Install Wifipumpkin3...${RESET}"
-apt-get install -y libssl-dev libffi-dev build-essential
-cd /usr/share
-git clone https://github.com/P0cL4bs/wifipumpkin3.git
-cd wifipumpkin3
-apt-get install -y python3-pyqt5
-python3 setup.py install
-python3 -m pip install pyOpenSSL==19.0.0
+apt-get install -y libssl-dev libffi-dev build-essential python3-pyqt5
+if [ -d /usr/share/wifipumpkin3 ]; then
+	echo "${YELLOW}[~] Updating existing Wifipumpkin3...${RESET}"
+	cd /usr/share/wifipumpkin3 && git pull
+else
+	cd /usr/share && git clone https://github.com/P0cL4bs/wifipumpkin3.git
+fi
+cd /usr/share/wifipumpkin3
+python3 -m pip install . --break-system-packages 2>/dev/null || python3 -m pip install .
+python3 -m pip install pyOpenSSL --break-system-packages 2>/dev/null || python3 -m pip install pyOpenSSL
 read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Install Wifiphisher...${RESET}"
-cd /usr/share
-git clone https://github.com/wifiphisher/wifiphisher.git
-cd wifiphisher
+if [ -d /usr/share/wifiphisher ]; then
+	cd /usr/share/wifiphisher && git pull
+else
+	cd /usr/share && git clone https://github.com/wifiphisher/wifiphisher.git
+fi
+cd /usr/share/wifiphisher
 apt-get install -y libnl-3-dev libnl-genl-3-dev
-python3 setup.py install
+python3 -m pip install . --break-system-packages 2>/dev/null || python3 -m pip install .
 read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Install Fluxion...${RESET}"
-cd /usr/share
-git clone https://github.com/FluxionNetwork/fluxion.git
+if [ -d /usr/share/fluxion ]; then
+	cd /usr/share/fluxion && git pull
+else
+	cd /usr/share && git clone https://github.com/FluxionNetwork/fluxion.git
+fi
 # Fluxion requires X (graphical) session available
 read -n 1 -s -r -p "Press any key to continue"
 
 
-echo "${YELLOW}[~] Install Bettercap2...${RESET}"
-apt-get -y remove bettercap
-rm `which bettercap`
+echo "${YELLOW}[~] Install/Update Bettercap2...${RESET}"
+apt-get -y remove bettercap || true
+command -v bettercap >/dev/null 2>&1 && rm -f "$(command -v bettercap)"
 apt-get install -y bettercap
-`which bettercap` -version
+bettercap -version || true
+read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Install crEAP...${RESET}"
-cd /usr/share
-git clone https://github.com/Shellntel/scripts.git creap
+if [ -d /usr/share/creap ]; then
+	cd /usr/share/creap && git pull
+else
+	cd /usr/share && git clone https://github.com/Shellntel/scripts.git creap
+fi
 read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Install EAPHammer...${RESET}"
-cd /usr/share
-git clone https://github.com/s0lst1c3/eaphammer.git
-cd eaphammer
-./kali-setup
-python3 -m pip install flask_cors
-python3 -m pip install flask_socketio
-python3 -m pip install --upgrade gevent
+if [ -d /usr/share/eaphammer ]; then
+	cd /usr/share/eaphammer && git pull
+else
+	cd /usr/share && git clone https://github.com/s0lst1c3/eaphammer.git
+fi
+cd /usr/share/eaphammer
+./kali-setup || true
+python3 -m pip install flask_cors flask_socketio gevent --break-system-packages 2>/dev/null || python3 -m pip install flask_cors flask_socketio gevent
 read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Install Airgeddon...${RESET}"
-cd /usr/share
-git clone https://github.com/v1s1t0r1sh3r3/airgeddon.git
+if [ -d /usr/share/airgeddon ]; then
+	cd /usr/share/airgeddon && git pull
+else
+	cd /usr/share && git clone https://github.com/v1s1t0r1sh3r3/airgeddon.git
+fi
 read -n 1 -s -r -p "Press any key to continue"
 
 
-#echo "${YELLOW}[~] Install Hostapd-mana...${RESET}"
-#cd /usr/share
-#git clone https://github.com/sensepost/hostapd-mana
-#cd hostapd-mana
-#make -C hostapd
-
-
 echo "${YELLOW}[~] Install Berate_ap...${RESET}"
-cd /usr/share
-git clone https://github.com/sensepost/berate_ap.git
+if [ -d /usr/share/berate_ap ]; then
+	cd /usr/share/berate_ap && git pull
+else
+	cd /usr/share && git clone https://github.com/sensepost/berate_ap.git
+fi
 read -n 1 -s -r -p "Press any key to continue"
 
 
 echo "${YELLOW}[~] Install WPA_Sycophant...${RESET}"
-cd /usr/share
-git clone https://github.com/sensepost/wpa_sycophant.git
+if [ -d /usr/share/wpa_sycophant ]; then
+	cd /usr/share/wpa_sycophant && git pull
+else
+	cd /usr/share && git clone https://github.com/sensepost/wpa_sycophant.git
+fi
 read -n 1 -s -r -p "Press any key to continue"
 
 
 updatedb
 
+echo "${YELLOW}[~] Cleaning up package cache...${RESET}"
+apt-get autoremove -y
+apt-get clean
+
 echo "${GREEN}[+] Install script finished. Now Reboot !"
 echo 
-
