@@ -19,9 +19,8 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-systemctl stop dnsmasq
-systemctl stop hostapd
+systemctl stop dnsmasq || true
+systemctl stop hostapd || true
 
 echo "${GREEN}[+] AP Stopped${RESET}"
 echo
-

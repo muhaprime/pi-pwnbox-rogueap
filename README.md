@@ -24,6 +24,7 @@ Table of Contents
 * [Pi-PwnBox-RogueAP](#pi-pwnbox-rogueap)
 * [Equipment used](#equipment-used)
 * [WiFi USB Adapters Overview](#wifi-usb-adapters-overview)
+* [Requirements & Compatibility](#requirements--compatibility)
 * [Installation](#installation)
 * [PwnBox Network Configuration](#pwnbox-network-configuration)
   * [Wireless Dedicated Administration Network](#wireless-dedicated-administration-network)
@@ -31,6 +32,7 @@ Table of Contents
 * [PwnBox Remote Access](#pwnbox-remote-access)
 * [Usage](#usage)
 * [WiFi Hacking Cheatsheets &amp; Mind Map](#wifi-hacking-cheatsheets--mind-map)
+* [Troubleshooting](#troubleshooting)
 * [Possible Upgrade](#possible-upgrade)
 
   
@@ -38,15 +40,15 @@ Table of Contents
 Equipment used
 --------------
 
-- [Raspberry Pi 3 Model B+](https://www.raspberrypi.org/products/raspberry-pi-3-model-b-plus)
-- Micro SD Memory Card 64 Go
-- Raspberry Pi Case
+- [Raspberry Pi 3 Model B+](https://www.raspberrypi.org/products/raspberry-pi-3-model-b-plus), [Pi 4](https://www.raspberrypi.org/products/raspberry-pi-4-model-b) or [Pi 5](https://www.raspberrypi.org/products/raspberry-pi-5)
+- Micro SD Memory Card 64 GB (class 10 or better, UHS-I recommended)
+- Raspberry Pi Case (with passive/active cooling for Pi 4/5)
 - Alfa WiFi USB Adapter [AWUS036NEH](https://www.alfa.com.tw/products_detail/10.htm)
 - Alfa WiFi USB Adapter [AWUS036ACH](https://www.alfa.com.tw/products_detail/1.htm)
 - BrosTrend WiFi USB Adapter AC1L AC1200 (can be replaced by any adapter supporting AP mode)
 - USB cable Male to Female
 - Rii Mini Wireless Keyboard (optional)
-- Powerbank
+- Powerbank (minimum 2.5A for Pi 3, 3A+ for Pi 4/5)
 
 
 
@@ -64,36 +66,46 @@ WiFi USB Adapters Overview
 
 
 
+Requirements & Compatibility
+------------------------------
+
+- **OS:** [Kali Linux ARM](https://www.kali.org/get-kali/#kali-arm) for Raspberry Pi (64-bit recommended for Pi 4/5).
+- **Internet:** During installation the PwnBox must have access to the Internet.
+- **Root:** Install script must be run as `root`.
+- **Note for Pi 4/5:** The 64-bit Kali ARM image is highly recommended. All tools work on `arm64`, but some older precompiled binaries may require `box64` or manual compilation.
+
+
+
 Installation
 ------------
 
-1. Download Kali Linux ARM Image for Raspberry Pi: https://www.offensive-security.com/kali-linux-arm-images/
-2. Flash Kali Linux ARM Image for Rapberry Pi onto Micro SD Card.
-3. Make sure to have Internet connection on PwnBox.
+1. Download Kali Linux ARM Image for Raspberry Pi: https://www.kali.org/get-kali/#kali-arm
+2. Flash Kali Linux ARM Image for Raspberry Pi onto Micro SD Card (use [Raspberry Pi Imager](https://www.raspberrypi.com/software/) or `dd`).
+3. Boot Raspberry Pi, log in (default kali/kali) and make sure it has Internet connection.
 4. Download install scripts/configurations on the PwnBox:
-   ```
+   ```bash
    git clone https://github.com/koutto/pi-pwnbox-rogueap.git
    ```
-5. **Important:** Edit install script configuration at the top of `scripts/install-system.sh`file:
+5. **Important:** Edit install script configuration at the top of `scripts/install-system.sh` file:
 
-   - Choose *Guacamole* passwords.
+   - Choose *Guacamole* passwords (`GUACAMOLE_PASSWORD`, `GUACAMOLE_MYSQL_PASSWORD`).
    - Set WiFi interfaces persistent names based on their MAC addresses: `wlxaabbccddeeff` for a device with MAC address `aa:bb:cc:dd:ee:ff`.
    - Set MAC addresses of `eth0` & `wlan0` (built-in interfaces).
-   - Set WiFi connection settings.
+   - Set WiFi connection settings (`WIFI_SSID`, `WIFI_PASSPHRASE`).
 6. Run install script (will pause at the end of each step in order to allow for manual inspection of command outputs)
-   ```
+   ```bash
    cd pi-pwnbox-rogueap/scripts
    ./install-system.sh
    ```
 7. Reboot & check correct configuration of network interfaces:
 
-   ```
+   ```bash
    ip a
    iwconfig
    ```
    - Built-in wired and wireless interfaces should be named `eth0` and `wlan0` respectively.
-   - WiFi USB Adapters should use persistent naming (modern naming convention).
-   - AP (`PWNBOX_ADMIN`) should be started on appropriate `wlx*`interface.
+   - WiFi USB Adapters should use persistent naming (modern naming convention `wlx*`).
+   - AP (`PWNBOX_ADMIN`) should be started on appropriate `wlx*` interface.
 8. Configure VNC-over-HTTP on *Guacamole*:
    1. Connect to Guacamole at http://<ip_pwnbox>:8080/guacamole/
    2. Go to *guacadmin (top right) > Settings > Connections*
@@ -111,7 +123,7 @@ Installation
       - Authentication Password = `(password chosen at install when running install-system.sh)`
       - Color depth = `True color (32-bit)`
 9. Change default credentials:
-   - Kali system credentials
+   - Kali system credentials (`passwd kali`)
    - Guacamole credentials (via `http://<ip_pwnbox>:8080/guacamole/#/manage/mysql/users/guacadmin`)
 
 
@@ -138,11 +150,11 @@ When booting, PwnBox automatically connects to:
      - Use wired network,
      - Use monitor + (wireless) keyboard.
   2. Add WPA passphrase to PwnBox local configuration:
-     ```
+     ```bash
      wpa_passphrase <SSID> <passphrase> >> /etc/wpa_supplicant.conf
      ```
   3. Test connection:
-     ```
+     ```bash
      wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant.conf
      dhclient -v wlan0
      ping 8.8.8.8
@@ -155,20 +167,20 @@ PwnBox can be controlled through:
 
 - **SSH Service (22/tcp):**
 
-  ```
+  ```bash
   ssh kali@<ip_pwnbox>
   ```
 
 - **VNC-over-HTTP with Guacamole (8080/tcp):** 
 
-  ```
+  ```bash
   http://<ip_pwnbox>:8080/guacamole
   ```
 
 **PwnBox's IP** depends on the network you want to access it from:
 
 - Via Wireless Dedicated Administration Network (i.e. connected to hidden SSID `PWNBOX_ADMIN`): IP is always `10.0.0.1`.
-- Via LAN Network (wireless or wired): IP depends on the value allocated by DHCP server. IP can be found using `netdiscover`for example.
+- Via LAN Network (wireless or wired): IP depends on the value allocated by DHCP server. IP can be found using `netdiscover` for example.
 
 *Note: Guacamole service might take a lot of resources (RAM) when running. If not used, it can be stopped using `stop-guacamole.sh` script.*
 
@@ -197,7 +209,76 @@ WiFi Hacking Cheatsheets & Mind Map
 
 
 
+Troubleshooting
+---------------
+
+### Slow boot when Ethernet cable is unplugged
+Because `/etc/network/interfaces` uses `auto eth0`, the system waits for a DHCP lease during boot. If you frequently run the PwnBox without Ethernet and experience slow boots, edit `/etc/network/interfaces` and change:
+```bash
+auto eth0
+allow-hotplug eth0
+```
+to:
+```bash
+allow-hotplug eth0
+```
+(Remove the `auto eth0` line.)
+
+### DHCP service conflict warning
+`isc-dhcp-server` is installed because some tools (e.g., Fluxion) require it, but it is **disabled by default** to avoid a port 67/udp conflict with `dnsmasq` (which serves the `PWNBOX_ADMIN` AP). If you need `isc-dhcp-server`, stop `dnsmasq` first:
+```bash
+systemctl stop dnsmasq
+systemctl start isc-dhcp-server
+```
+
+### Guacamole / Tomcat service fails to start
+Newer Kali/Debian releases ship **Tomcat 10** instead of Tomcat 9. The `start-guacamole.sh` and `stop-guacamole.sh` scripts auto-detect the installed Tomcat version. If Guacamole does not work after install, check:
+```bash
+systemctl list-unit-files | grep tomcat
+systemctl status guacd
+systemctl status mysql
+# Then start manually with correct tomcat version, e.g.:
+systemctl start tomcat10
+```
+
+### BrosTrend AC1L driver issues
+If the vendor installer (`deb.trendtechcn.com`) is offline, build the driver manually:
+```bash
+sudo apt-get install -y bc git build-essential dkms
+sudo git clone https://github.com/cilynx/rtl88x2bu.git /usr/src/rtl88x2bu-5.8.7
+sudo dkms add -m rtl88x2bu -v 5.8.7
+sudo dkms autoinstall
+```
+
+### VNC server does not start
+Make sure you ran `vncpasswd` during install to create the password file:
+```bash
+vncpasswd
+systemctl restart vncserver
+```
+
+### Python 2 tools no longer work
+Python 2 has been removed from modern Kali. The install script now uses **Python 3 only**. If you have old custom Python 2 tools, migrate them to Python 3 or run them in a dedicated Docker container.
+
+### No Internet after disabling NetworkManager
+The install script disables NetworkManager in favor of classic `/etc/network/interfaces`. If you need to temporarily re-enable NM:
+```bash
+systemctl start NetworkManager
+systemctl enable NetworkManager
+```
+
+### Wireless interface names changed after reboot
+Check that your MAC addresses in `install-system.sh` match reality:
+```bash
+ip link show
+```
+Then re-run the network configuration section or update `/etc/udev/rules.d/70-persistent-net.rules` manually.
+
+
+
 Possible Upgrade
 ----------------
 
 - Add 4G USB dongle for remote access to PwnBox using 4G cell network.
+- Replace BrosTrend AC1L with a dual-band AP-capable adapter supporting 802.11ax (WiFi 6) for better performance.
+- Add GPS USB module for wardriving with Kismet.
